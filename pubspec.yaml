@@ -1,0 +1,109 @@
+name: grocery_app
+description: "A new Flutter project."
+# The following line prevents the package from being accidentally published to
+# pub.dev using flutter pub publish. This is preferred for private packages.
+publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+
+# The following defines the version and build number for your application.
+# A version number is three numbers separated by dots, like 1.2.43
+# followed by an optional build number separated by a +.
+# Both the version and the builder number may be overridden in flutter
+# build by specifying --build-name and --build-number, respectively.
+# In Android, build-name is used as versionName while build-number used as versionCode.
+# Read more about Android versioning at https://developer.android.com/studio/publish/versioning
+# In iOS, build-name is used as CFBundleShortVersionString while build-number is used as CFBundleVersion.
+# Read more about iOS versioning at
+# https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
+# In Windows, build-name is used as the major, minor, and patch parts
+# of the product and file versions while build-number is used as the build suffix.
+version: 1.0.0+1
+
+environment:
+  # Adjusted to a standard current stable SDK range for safety, but kept your version requirement format.
+  sdk: ^3.8.1
+
+# Dependencies specify other packages that your package needs in order to work.
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # The following adds the Cupertino Icons font to your application.
+  # Use with the CupertinoIcons class for iOS style icons.
+  cupertino_icons: ^1.0.8
+  carousel_slider: ^5.1.1 # Moved from dev_dependencies, as it's a runtime dependency
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  
+  # START: Packages for Custom Logo/Splash Screen
+  flutter_launcher_icons: "^0.13.1" # For replacing the app icon
+  # END: Packages for Custom Logo/Splash Screen
+  
+  # The "flutter_lints" package below contains a set of recommended lints to
+  # encourage good coding practices.
+  flutter_lints: ^6.0.0
+
+# START: CONFIGURATION FOR NATIVE ICONS AND SPLASH SCREEN
+
+# Configuration for Flutter Launcher Icons (App Icon)
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  # Using 'assets/images/groceryimg.png' as the logo image path
+  image_path: "assets/images/groceryimg.png" 
+  min_sdk_android: 21
+
+# Configuration for Flutter Native Splash (Startup Logo)
+flutter_native_splash:
+  # Splash screen background color (White for a clean look)
+  color: "#ffffff"
+  # Path to your logo image
+  image: "assets/images/groceryimg.png"
+  # You can uncomment and change this for dark mode support if needed
+  # dark_color: "#000000"
+  # dark_image: "assets/images/groceryimg_dark.png" 
+
+# END: CONFIGURATION FOR NATIVE ICONS AND SPLASH SCREEN
+
+
+# The following section is specific to Flutter packages.
+flutter:
+
+  # The following line ensures that the Material Icons font is
+  # included with your application, so that you can use the icons in
+  # the material Icons class.
+  uses-material-design: true
+
+  # To add assets to your application, add an assets section, like this:
+  assets:
+    - assets/images/grocery.png
+    - assets/images/apple.jpg
+    - assets/images/banana.jpg
+    - assets/images/bell_paper.jpeg
+    - assets/images/ginger.jpeg
+    - assets/images/banner1.jpeg
+    - assets/images/banner2.png
+    - assets/images/banner3.jpeg
+    - assets/images/vegetables.jpg
+    - assets/images/oil.jpg
+    - assets/images/snacks.jpg
+    - assets/images/beverages.webp
+    - assets/images/dairy.png
+    - assets/images/sprite.jpg
+    - assets/images/coco.jpg
+    - assets/images/pepsi.jpg
+    - assets/images/groceryimg.png 
+    - assets/images/watermelon.jpg
+    - assets/images/grocery_back.jpg
+    - assets/images/checkout.jpg
+    - assets/images/grocery_checkout.jpeg
+    - assets/images/order.png
+    - assets/images/cucumber.jpg
+    - assets/images/banner4.webp
+    - assets/images/tomato.jpeg
+    - assets/images/strawberry.jpeg
+    - assets/images/brocoli.jpg
+    - assets/images/avocado.jpg
+    - assets/images/banner5.webp
+    - assets/images/banner7.jpeg

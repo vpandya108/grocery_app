@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:grocery_app/services/database_service.dart';
+import 'package:grocery_app/models/product_model.dart';
 
 class ProductDetail extends StatefulWidget {
   const ProductDetail({super.key});
@@ -8,17 +11,41 @@ class ProductDetail extends StatefulWidget {
 }
 
 class _ProductDetailState extends State<ProductDetail> {
-  // Default values for the quantity counter
+  final DatabaseService _databaseService = DatabaseService();
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  
   int quantity = 1;
+  bool _isAddingToCart = false;
+  bool _isFavorite = false;
 
-  // Function to increment the quantity
+  @override
+  void initState() {
+    super.initState();
+    _checkIfFavorite();
+  }
+
+  Future<void> _checkIfFavorite() async {
+    final currentUser = _auth.currentUser;
+    if (currentUser == null) return;
+
+    final product = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
+    if (product == null) return;
+
+    final productId = product['id']?.toString() ?? '';
+    if (productId.isEmpty) return;
+
+    final isFav = await _databaseService.isFavorite(currentUser.uid, productId);
+    setState(() {
+      _isFavorite = isFav;
+    });
+  }
+
   void _incrementQuantity() {
     setState(() {
       quantity++;
     });
   }
 
-  // Function to decrement the quantity, ensuring it doesn't go below 1
   void _decrementQuantity() {
     setState(() {
       if (quantity > 1) {
@@ -27,13 +54,133 @@ class _ProductDetailState extends State<ProductDetail> {
     });
   }
 
+  Future<void> _addToCart(
+    BuildContext context,
+    Map<String, dynamic> product,
+    int itemQuantity,
+  ) async {
+    final currentUser = _auth.currentUser;
+
+    if (currentUser == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please login to add items to cart'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _isAddingToCart = true;
+    });
+
+    try {
+      final productId = product['id']?.toString() ?? 'product_${DateTime.now().millisecondsSinceEpoch}';
+      final cartItemId = '${currentUser.uid}_$productId';
+
+      final cartItem = CartItem(
+        id: cartItemId,
+        userId: currentUser.uid,
+        productId: productId,
+        productName: product['name'] ?? 'Unknown Product',
+        productImage: product['imagePath'] ?? 'assets/images/placeholder.jpg',
+        price: (product['price'] ?? 0.0).toDouble(),
+        quantity: product['quantity'] ?? 'N/A',
+        itemCount: itemQuantity,
+        addedAt: DateTime.now(),
+      );
+
+      await _databaseService.addToCart(currentUser.uid, cartItem);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Added $itemQuantity × ${product['name']} to cart!'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 2),
+            action: SnackBarAction(
+              label: 'VIEW CART',
+              textColor: Colors.white,
+              onPressed: () {
+                Navigator.pushReplacementNamed(context, '/cart_page');
+              },
+            ),
+          ),
+        );
+      }
+
+      // Reset quantity after adding
+      setState(() {
+        quantity = 1;
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error adding to cart: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isAddingToCart = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _toggleFavorite(String productId) async {
+    final currentUser = _auth.currentUser;
+    if (currentUser == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please login to add favorites'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    try {
+      if (_isFavorite) {
+        await _databaseService.removeFromFavorites(currentUser.uid, productId);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Removed from favorites'),
+            duration: Duration(seconds: 1),
+          ),
+        );
+      } else {
+        await _databaseService.addToFavorites(currentUser.uid, productId);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Added to favorites'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 1),
+          ),
+        );
+      }
+
+      setState(() {
+        _isFavorite = !_isFavorite;
+      });
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    // 1. Retrieve the product data passed via arguments
-    final product =
-        ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
+    final product = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
 
-    // Handle case where product data might be missing (shouldn't happen if navigating correctly)
     if (product == null) {
       return Scaffold(
         appBar: AppBar(title: const Text('Error')),
@@ -41,29 +188,21 @@ class _ProductDetailState extends State<ProductDetail> {
       );
     }
 
-    // Safely extract data, using defaults if keys are missing
     final String name = product['name'] ?? 'Unknown Product';
     final String quantityText = product['quantity'] ?? 'N/A';
-    final double price = product['price'] ?? 0.00;
-    final String imagePath =
-        product['imagePath'] ?? 'assets/images/placeholder.jpg';
-
-    // The price shown on the screen is the unit price, not total price
+    final double price = (product['price'] ?? 0.0).toDouble();
+    final String imagePath = product['imagePath'] ?? 'assets/images/placeholder.jpg';
+    final String productDetail = product['description'] ?? 'No product description available.';
+    final String productId = product['id']?.toString() ?? '';
     final String displayPrice = '\$${price.toStringAsFixed(2)}';
 
-    // Placeholder product detail and nutrition data (for demonstration)
-    const String productDetail =
-        'Apples Are Nutritious. Apples May Be Good For Weight Loss. Apples May Be Good For Your Heart. As Part Of A Healtful And Varied Diet.';
     const String nutritionValue = '100gr';
 
     return Scaffold(
       body: CustomScrollView(
         slivers: [
-          // 2. Custom App Bar for the Image
           SliverAppBar(
-            expandedHeight:
-                MediaQuery.of(context).size.height *
-                0.4, // 40% of screen height
+            expandedHeight: MediaQuery.of(context).size.height * 0.4,
             pinned: true,
             leading: IconButton(
               icon: const Icon(Icons.arrow_back_ios, color: Colors.black),
@@ -86,8 +225,6 @@ class _ProductDetailState extends State<ProductDetail> {
               ),
             ),
           ),
-
-          // 3. Product Details Section
           SliverList(
             delegate: SliverChildListDelegate([
               Padding(
@@ -99,22 +236,22 @@ class _ProductDetailState extends State<ProductDetail> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          name,
-                          style: const TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
+                        Expanded(
+                          child: Text(
+                            name,
+                            style: const TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
                         IconButton(
-                          icon: const Icon(
-                            Icons.favorite_border,
-                            color: Colors.grey,
+                          icon: Icon(
+                            _isFavorite ? Icons.favorite : Icons.favorite_border,
+                            color: _isFavorite ? Colors.red : Colors.grey,
                             size: 28,
                           ),
-                          onPressed: () {
-                            // Handle favourite toggle
-                          },
+                          onPressed: () => _toggleFavorite(productId),
                         ),
                       ],
                     ),
@@ -134,10 +271,7 @@ class _ProductDetailState extends State<ProductDetail> {
                         // Quantity Selector
                         Row(
                           children: [
-                            _buildQuantityButton(
-                              Icons.remove,
-                              _decrementQuantity,
-                            ),
+                            _buildQuantityButton(Icons.remove, _decrementQuantity),
                             Container(
                               width: 45,
                               alignment: Alignment.center,
@@ -165,7 +299,6 @@ class _ProductDetailState extends State<ProductDetail> {
                     ),
 
                     const SizedBox(height: 30),
-
                     const Divider(height: 1, thickness: 1),
                     const SizedBox(height: 20),
 
@@ -215,17 +348,12 @@ class _ProductDetailState extends State<ProductDetail> {
                       trailing: Row(
                         children: [
                           const Row(
-                            // Star Rating
                             children: [
                               Icon(Icons.star, color: Colors.orange, size: 20),
                               Icon(Icons.star, color: Colors.orange, size: 20),
                               Icon(Icons.star, color: Colors.orange, size: 20),
                               Icon(Icons.star, color: Colors.orange, size: 20),
-                              Icon(
-                                Icons.star_half,
-                                color: Colors.orange,
-                                size: 20,
-                              ),
+                              Icon(Icons.star_half, color: Colors.orange, size: 20),
                             ],
                           ),
                           const SizedBox(width: 8),
@@ -242,9 +370,7 @@ class _ProductDetailState extends State<ProductDetail> {
                     ),
 
                     const Divider(height: 1, thickness: 1),
-                    const SizedBox(
-                      height: 100,
-                    ), // Space for the floating button
+                    const SizedBox(height: 100),
                   ],
                 ),
               ),
@@ -252,15 +378,12 @@ class _ProductDetailState extends State<ProductDetail> {
           ),
         ],
       ),
-
-      // 4. Floating 'Add to Basket' Button
       bottomNavigationBar: Container(
         padding: const EdgeInsets.all(25.0),
         child: ElevatedButton(
-          onPressed: () {
-            // Handle Add to Basket logic here
-            debugPrint('Added $quantity x $name to basket!');
-          },
+          onPressed: _isAddingToCart
+              ? null
+              : () => _addToCart(context, product, quantity),
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.green,
             minimumSize: const Size(double.infinity, 60),
@@ -268,20 +391,28 @@ class _ProductDetailState extends State<ProductDetail> {
               borderRadius: BorderRadius.circular(15),
             ),
           ),
-          child: const Text(
-            'Add To Basket',
-            style: TextStyle(
-              fontSize: 18,
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
+          child: _isAddingToCart
+              ? const SizedBox(
+                  height: 20,
+                  width: 20,
+                  child: CircularProgressIndicator(
+                    color: Colors.white,
+                    strokeWidth: 2,
+                  ),
+                )
+              : const Text(
+                  'Add To Basket',
+                  style: TextStyle(
+                    fontSize: 18,
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
         ),
       ),
     );
   }
 
-  // Helper widget for the quantity selector buttons
   Widget _buildQuantityButton(IconData icon, VoidCallback onPressed) {
     return InkWell(
       onTap: onPressed,
@@ -297,7 +428,6 @@ class _ProductDetailState extends State<ProductDetail> {
     );
   }
 
-  // Helper widget for Nutrition/Review rows
   Widget _buildInfoRow(
     String title, {
     required Widget trailing,

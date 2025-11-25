@@ -31,13 +31,17 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
   carousel_slider: ^5.1.1 # Moved from dev_dependencies, as it's a runtime dependency
-
+  firebase_auth: ^6.1.2   # Update to the latest
+  firebase_core: ^4.2.1
+  firebase_storage: ^13.0.4
+  firebase_analytics: 12.0.4
+  cloud_firestore: ^6.1.0 # Update to the latest
 dev_dependencies:
   flutter_test:
     sdk: flutter
   
   # START: Packages for Custom Logo/Splash Screen
-  flutter_launcher_icons: "^0.13.1" # For replacing the app icon
+  flutter_launcher_icons: ^0.14.4 # For replacing the app icon
   # END: Packages for Custom Logo/Splash Screen
   
   # The "flutter_lints" package below contains a set of recommended lints to

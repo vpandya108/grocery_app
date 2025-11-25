@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:carousel_slider/carousel_slider.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:grocery_app/services/database_service.dart';
+import 'package:grocery_app/models/product_model.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -9,21 +12,18 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  // NOTE: This _currentIndex is only used for the state of this screen.
-  // The BottomNavigationBar's 'currentIndex' is fixed at 0 for this page.
-  // int _currentIndex = 0; // Removed as it's not used to control the NavBar index here
+  final DatabaseService _databaseService = DatabaseService();
+  final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  // Add a list of banner images
   final List<String> bannerImages = const [
     'assets/images/grocery_back.jpg',
     'assets/images/banner5.webp',
     'assets/images/banner7.jpeg',
   ];
 
-  // Dummy data structure for products
   final List<Map<String, dynamic>> products = const [
     {
-      'id': 1,
+      'id': 'product_1',
       'name': 'Organic Bananas',
       'quantity': '7pcs',
       'price': 4.99,
@@ -33,77 +33,204 @@ class _HomeScreenState extends State<HomeScreen> {
           'Premium organic bananas, naturally sweet and packed with potassium. Perfect for smoothies or a quick, healthy snack.',
     },
     {
-      'id': 2,
+      'id': 'product_2',
       'name': 'Red Apple',
       'quantity': '1kg',
       'price': 4.99,
       'imagePath': 'assets/images/apple.jpg',
       'section': 'exclusive',
+      'description': 'Crisp and juicy red apples, perfect for snacking.',
     },
-    // --- NEW ITEM ADDED ---
     {
-      'id': 6,
+      'id': 'product_6',
       'name': 'Organic Cucumber',
       'quantity': '1pc',
       'price': 1.99,
-      'imagePath': 'assets/images/cucumber.jpg', // Assuming you have this asset
+      'imagePath': 'assets/images/cucumber.jpg',
       'section': 'exclusive',
+      'description': 'Fresh organic cucumbers, crisp and refreshing.',
     },
-    // ----------------------
     {
-      'id': 3,
+      'id': 'product_3',
       'name': 'Bell Pepper Red',
       'quantity': '1kg',
       'price': 4.99,
       'imagePath': 'assets/images/bell_paper.jpeg',
       'section': 'best_selling',
+      'description':
+          'Crisp and vibrant red bell peppers, rich in vitamins A and C. Ideal for salads, stir-fries, and adding a sweet crunch to any dish.',
     },
     {
-      'id': 4,
+      'id': 'product_4',
       'name': 'Ginger',
       'quantity': '250gm',
       'price': 4.99,
       'imagePath': 'assets/images/ginger.jpeg',
       'section': 'best_selling',
+      'description': 'Fresh ginger root, perfect for cooking and tea.',
     },
     {
-      'id': 5,
+      'id': 'product_5',
       'name': 'Watermelon',
       'quantity': '1pc',
       'price': 3.50,
       'imagePath': 'assets/images/watermelon.jpg',
       'section': 'best_selling',
+      'description': 'Sweet and juicy watermelon, perfect for summer.',
     },
   ];
 
-  // Handle BottomNavigationBar taps
+  // Store favorite status for each product
+  Map<String, bool> _favoriteStatus = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFavoriteStatus();
+  }
+
+  Future<void> _loadFavoriteStatus() async {
+    final currentUser = _auth.currentUser;
+    if (currentUser == null) return;
+
+    Map<String, bool> status = {};
+    for (var product in products) {
+      final productId = product['id']?.toString() ?? '';
+      if (productId.isNotEmpty) {
+        final isFav = await _databaseService.isFavorite(currentUser.uid, productId);
+        status[productId] = isFav;
+      }
+    }
+
+    setState(() {
+      _favoriteStatus = status;
+    });
+  }
+
+  Future<void> _toggleFavorite(String productId) async {
+    final currentUser = _auth.currentUser;
+    
+    if (currentUser == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please login to add favorites'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    try {
+      final isFavorite = _favoriteStatus[productId] ?? false;
+
+      if (isFavorite) {
+        await _databaseService.removeFromFavorites(currentUser.uid, productId);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Removed from favorites'),
+            duration: Duration(seconds: 1),
+          ),
+        );
+      } else {
+        await _databaseService.addToFavorites(currentUser.uid, productId);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Added to favorites'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 1),
+          ),
+        );
+      }
+
+      setState(() {
+        _favoriteStatus[productId] = !isFavorite;
+      });
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _quickAddToCart(Map<String, dynamic> product) async {
+    final currentUser = _auth.currentUser;
+
+    if (currentUser == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please login to add items to cart'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    try {
+      final productId = product['id']?.toString() ?? 'product_${DateTime.now().millisecondsSinceEpoch}';
+      final cartItemId = '${currentUser.uid}_$productId';
+
+      final cartItem = CartItem(
+        id: cartItemId,
+        userId: currentUser.uid,
+        productId: productId,
+        productName: product['name'] ?? 'Unknown Product',
+        productImage: product['imagePath'] ?? 'assets/images/placeholder.jpg',
+        price: (product['price'] ?? 0.0).toDouble(),
+        quantity: product['quantity'] ?? 'N/A',
+        itemCount: 1,
+        addedAt: DateTime.now(),
+      );
+
+      await _databaseService.addToCart(currentUser.uid, cartItem);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${product['name']} added to cart!'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 1),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   void _onItemTapped(int index) {
-    // The current index for HomeScreen (Shop tab) is fixed at 0.
     if (index == 0) return;
 
-    // Define routes for each index
     String routeName;
     switch (index) {
       case 0:
-        routeName = '/home_screen'; // Shop
+        routeName = '/home_screen';
         break;
       case 1:
-        routeName = '/explore_page'; // Explore
+        routeName = '/explore_page';
         break;
       case 2:
-        routeName = '/cart_page'; // Cart
+        routeName = '/cart_page';
         break;
       case 3:
-        routeName = '/favourite_page'; // Favourite
+        routeName = '/favourite_page';
         break;
       case 4:
-        routeName = '/account_page'; // Account
+        routeName = '/account_page';
         break;
       default:
-        return; // Should not happen
+        return;
     }
 
-    // Use pushReplacementNamed for main tab navigation to prevent a growing stack
     Navigator.pushReplacementNamed(context, routeName);
   }
 
@@ -114,13 +241,11 @@ class _HomeScreenState extends State<HomeScreen> {
         centerTitle: true,
         backgroundColor: Colors.transparent,
         elevation: 0,
-        // FIX 1: Ensure the entire title block is centered
         title: Column(
-          crossAxisAlignment:
-              CrossAxisAlignment.center, // Ensures contents are centered
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Image.asset(
-              'assets/images/grocery.png', // Add your logo image
+              'assets/images/grocery.png',
               height: 30,
               errorBuilder: (context, error, stackTrace) => const Text(
                 'GROCERY',
@@ -151,36 +276,46 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Search Bar (User can search by typing here)
-              TextField(
-                decoration: InputDecoration(
-                  hintText: 'Search Store',
-                  prefixIcon: const Icon(Icons.search),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(15),
-                    borderSide: BorderSide.none,
-                  ),
-                  filled: true,
-                  fillColor: Colors.grey[200],
-                ),
-                onSubmitted: (query) {
-                  // Implement search functionality, e.g., navigate to results page
-                  debugPrint('Searching for: $query');
+              // UPDATED SEARCH BAR - Now navigates to search page
+              GestureDetector(
+                onTap: () {
+                  // Navigate to search page
+                  Navigator.pushNamed(context, '/search_page');
                 },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[200],
+                    borderRadius: BorderRadius.circular(15),
+                  ),
+                  child: Row(
+                    children: const [
+                      Icon(Icons.search, color: Colors.grey),
+                      SizedBox(width: 10),
+                      Text(
+                        'Search Store',
+                        style: TextStyle(
+                          color: Colors.grey,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
               const SizedBox(height: 20),
 
-              // Carousel Banner (FIXED FIT)
+              // Banner Carousel
               CarouselSlider(
                 options: CarouselOptions(
-                  height: 150.0, // Increased height for better visibility
+                  height: 150.0,
                   enlargeCenterPage: true,
                   autoPlay: true,
                   aspectRatio: 16 / 9,
                   autoPlayCurve: Curves.fastOutSlowIn,
                   enableInfiniteScroll: true,
                   autoPlayAnimationDuration: const Duration(milliseconds: 800),
-                  viewportFraction: 1.0, // Ensures full width fit
+                  viewportFraction: 1.0,
                 ),
                 items: bannerImages.map((i) {
                   return Builder(
@@ -221,7 +356,6 @@ class _HomeScreenState extends State<HomeScreen> {
         type: BottomNavigationBarType.fixed,
         selectedItemColor: Colors.green,
         unselectedItemColor: Colors.black,
-        // The HomeScreen is the Shop tab, which is index 0
         currentIndex: 0,
         onTap: _onItemTapped,
         items: const <BottomNavigationBarItem>[
@@ -250,7 +384,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // Section Title with "See All" button
   Widget _buildSectionTitle(
     BuildContext context,
     String title,
@@ -265,12 +398,10 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         TextButton(
           onPressed: () {
-            // CHANGED: Navigating to a hypothetical /product_list_page
-            // instead of /explore_page to differentiate this action from the main tab.
             debugPrint('Navigating to See All for $title');
             Navigator.pushNamed(
               context,
-              '/product_list_page', // Use a dedicated route for product lists
+              '/product_list_page',
               arguments: {'category': title, 'section': sectionKey},
             );
           },
@@ -283,14 +414,10 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // Creates the horizontal list view of product cards
   Widget _buildProductList(BuildContext context, {required String section}) {
-    final filteredProducts = products
-        .where((p) => p['section'] == section)
-        .toList();
+    final filteredProducts = products.where((p) => p['section'] == section).toList();
 
     return SizedBox(
-      // Height set to 245 to prevent overflow.
       height: 245,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
@@ -306,11 +433,12 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // Single product card with onTap navigation
   Widget _buildProductCard(BuildContext context, Map<String, dynamic> product) {
+    final productId = product['id']?.toString() ?? '';
+    final isFavorite = _favoriteStatus[productId] ?? false;
+
     return GestureDetector(
       onTap: () {
-        // Navigate to the product detail page, passing the full product data
         Navigator.pushNamed(context, '/product_detail', arguments: product);
       },
       child: Container(
@@ -319,75 +447,98 @@ class _HomeScreenState extends State<HomeScreen> {
           border: Border.all(color: Colors.grey[300]!),
           borderRadius: BorderRadius.circular(15),
         ),
-        child: Padding(
-          padding: const EdgeInsets.all(12.0),
-          // FIX 2: Use Spacer to push the final Row to the bottom
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Product Image
-              Center(
-                // Use a fixed-height container for the image/placeholder
-                child: SizedBox(
-                  height: 80,
-                  child: Image.asset(
-                    product['imagePath'],
-                    fit: BoxFit
-                        .contain, // Ensure the image fits within the fixed space
-                    errorBuilder: (context, error, stackTrace) => const Icon(
-                      Icons.shopping_basket,
-                      size: 80,
-                      color: Colors.green,
+        child: Stack(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: SizedBox(
+                      height: 80,
+                      child: Image.asset(
+                        product['imagePath'],
+                        fit: BoxFit.contain,
+                        errorBuilder: (context, error, stackTrace) => const Icon(
+                          Icons.shopping_basket,
+                          size: 80,
+                          color: Colors.green,
+                        ),
+                      ),
                     ),
                   ),
-                ),
-              ),
-              const SizedBox(height: 10),
-              // Product Name
-              Text(
-                product['name'],
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                ),
-              ),
-              const SizedBox(height: 4),
-              // Product Quantity
-              Text(
-                product['quantity'],
-                style: const TextStyle(color: Colors.grey),
-              ),
-
-              const Spacer(), // Pushes everything below it to the bottom
-              // Price and Add to Cart Button
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
+                  const SizedBox(height: 10),
                   Text(
-                    '\$${product['price']}',
+                    product['name'],
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
-                      fontSize: 18,
+                      fontSize: 16,
                     ),
                   ),
-                  ElevatedButton(
-                    onPressed: () {
-                      debugPrint('Added ${product['name']} to cart!');
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                  const SizedBox(height: 4),
+                  Text(
+                    product['quantity'],
+                    style: const TextStyle(color: Colors.grey),
+                  ),
+                  const Spacer(),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        '\$${product['price']}',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                        ),
                       ),
-                      padding: const EdgeInsets.all(0),
-                      minimumSize: const Size(40, 40),
-                    ),
-                    child: const Icon(Icons.add, color: Colors.white),
+                      ElevatedButton(
+                        onPressed: () {
+                          _quickAddToCart(product);
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          padding: const EdgeInsets.all(0),
+                          minimumSize: const Size(40, 40),
+                        ),
+                        child: const Icon(Icons.add, color: Colors.white),
+                      ),
+                    ],
                   ),
                 ],
               ),
-            ],
-          ),
+            ),
+            // Favorite Button (Heart Icon)
+            Positioned(
+              top: 8,
+              right: 8,
+              child: GestureDetector(
+                onTap: () => _toggleFavorite(productId),
+                child: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.1),
+                        blurRadius: 4,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Icon(
+                    isFavorite ? Icons.favorite : Icons.favorite_border,
+                    color: isFavorite ? Colors.red : Colors.grey,
+                    size: 20,
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

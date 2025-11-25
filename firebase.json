@@ -1,0 +1,26 @@
+{
+  "flutter": {
+    "platforms": {
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "grocery-backend-8a5a1",
+          "configurations": {
+            "ios": "1:508656524886:ios:32259e70870e35d8b425f7",
+            "macos": "1:508656524886:ios:77dfab09f3d35b2ab425f7",
+            "web": "1:508656524886:web:747010f55d2454c6b425f7",
+            "windows": "1:508656524886:web:6dc11752e41900a9b425f7"
+          }
+        }
+      }
+    }
+  },
+  "firestore": {
+    "database": "(default)",
+    "location": "asia-south1",
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "storage": {
+    "rules": "storage.rules"
+  }
+}

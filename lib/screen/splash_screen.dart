@@ -10,8 +10,7 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    Timer(Duration(seconds: 3
-    ), () {
+    Timer(Duration(seconds: 3), () {
       Navigator.pushReplacementNamed(context, '/welcome');
     });
   }
@@ -25,7 +24,7 @@ class _SplashScreenState extends State<SplashScreen> {
           padding: EdgeInsets.all(20),
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(30),
           ),
           child: Image.asset(
             "assets/images/grocery.png", // <-- put your grocery logo here
